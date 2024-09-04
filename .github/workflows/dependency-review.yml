@@ -3,7 +3,7 @@ name: Semgrep Scan
 on:
   push:
     branches:
-      - main  # Or your desired branch
+      - '*'
 
 jobs:
   semgrep:
@@ -50,18 +50,7 @@ jobs:
           echo "errors=$errors" >> $GITHUB_OUTPUT
           echo "warnings=$warnings" >> $GITHUB_OUTPUT
       - name: Upload Semgrep Results as Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: semgrep-results
           path: semgrep_output.json
-
-      # - name: Set Semgrep Scan Status
-      #   if: always() # Run even if previous steps fail
-      #   run: |
-      #     echo "SEMGREP_STATUS=$(if [ steps.semgrep_summary.outputs.total_findings -eq 0 ]; then echo 'Success'; else echo 'Failure'; fi)" >> $GITHUB_ENV
-
-      # - name: Update Actions Dashboard with Summary
-      #   if: always() 
-      #   run: |
-      #     echo "::set-output name=summary::$GITHUB_STEP_SUMMARY" 
-      #     echo "::set-output name=status::${SEMGREP_STATUS}"
