@@ -1,20 +1,62 @@
-# Dependency Review Action
-#
-# This Action will scan dependency manifest files that change as part of a Pull Request, surfacing known-vulnerable versions of the packages declared or updated in the PR. Once installed, if the workflow run is marked as required, PRs introducing known-vulnerable packages will be blocked from merging.
-#
-# Source repository: https://github.com/actions/dependency-review-action
-# Public documentation: https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review#dependency-review-enforcement
-name: 'Dependency Review'
-on: [pull_request]
+name: Semgrep Scan
 
-permissions:
-  contents: read
+on:
+  push:
+    branches:
+      - main  # Or your desired branch
 
 jobs:
-  dependency-review:
+  semgrep:
+    name: semgrep-oss/scan
     runs-on: ubuntu-latest
+
+    container:
+      image: semgrep/semgrep
+
+    if: (github.actor != 'dependabot[bot]')
+
     steps:
-      - name: 'Checkout Repository'
-        uses: actions/checkout@v3
-      - name: 'Dependency Review'
-        uses: actions/dependency-review-action@v3
+      - uses: actions/checkout@v4
+
+      - name: Semgrep Scan
+        run: |
+          semgrep scan --config auto --json --oss-only --json-output=semgrep_output.json
+
+      - name: Generate Summary from Semgrep JSON
+        id: semgrep_summary # Add an ID to reference the outputs later
+        run: |
+          # Install 'jq' for JSON parsing
+          sudo apt-get update && sudo apt-get install -y jq
+
+          # Parse the JSON output
+          total_findings=$(jq '.results | length' semgrep_output.json)
+          errors=$(jq '.results | map(select(.severity == "ERROR")) | length' semgrep_output.json)
+          warnings=$(jq '.results | map(select(.severity == "WARNING")) | length' semgrep_output.json)
+
+          # Generate the summary
+          echo "### Semgrep Scan Results ###" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Findings:** $total_findings" >> $GITHUB_STEP_SUMMARY
+          echo "**Errors:** $errors" >> $GITHUB_STEP_SUMMARY
+          echo "**Warnings:** $warnings" >> $GITHUB_STEP_SUMMARY
+
+          # Optionally, include sample findings if any exist
+          if [ $total_findings -gt 0 ]; then
+            echo "**Sample Findings:**" >> $GITHUB_STEP_SUMMARY
+            jq '.results[0:2] | .[] | "\(.path):\(.start.line):\(.extra.message)"' semgrep_output.json >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Set outputs for use in later steps or other jobs
+          echo "total_findings=$total_findings" >> $GITHUB_OUTPUT
+          echo "errors=$errors" >> $GITHUB_OUTPUT
+          echo "warnings=$warnings" >> $GITHUB_OUTPUT
+
+      - name: Set Semgrep Scan Status
+        if: always() # Run even if previous steps fail
+        run: |
+          echo "SEMGREP_STATUS=$(if [ steps.semgrep_summary.outputs.total_findings -eq 0 ]; then echo 'Success'; else echo 'Failure'; fi)" >> $GITHUB_ENV
+
+      - name: Update Actions Dashboard with Summary
+        if: always() 
+        run: |
+          echo "::set-output name=summary::$GITHUB_STEP_SUMMARY" 
+          echo "::set-output name=status::${SEMGREP_STATUS}"
