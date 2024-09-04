@@ -22,6 +22,36 @@ jobs:
         run: |
           semgrep scan --config auto --oss-only --sarif --output=semgrep_output.sarif
 
+      - name: Generate Summary from Semgrep SARIF
+        id: semgrep_summary 
+        run: |
+          # Install 'jq' for JSON parsing (if not already installed)
+          sudo apt-get update && sudo apt-get install -y jq
+
+          # Parse the SARIF output
+          total_findings=$(jq '.runs[].results | length' semgrep_output.sarif) 
+          errors=$(jq '.runs[].results[] | select(.level == "error") | length' semgrep_output.sarif)
+          warnings=$(jq '.runs[].results[] | select(.level == "warning") | length' semgrep_output.sarif)
+
+          # Sample findings (adjust the query based on your SARIF structure)
+          sample_findings=$(jq -r '.runs[].results[] | "\(.message.text) at \(.locations[].physicalLocation.artifactLocation.uri):\(.locations[].physicalLocation.region.startLine)"' semgrep_output.sarif | head -n 3) # Get first 3 findings
+
+          # Generate the summary
+          echo "### Semgrep Scan Results (SARIF) ###" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Findings:** $total_findings" >> $GITHUB_STEP_SUMMARY
+          echo "**Errors:** $errors" >> $GITHUB_STEP_SUMMARY
+          echo "**Warnings:** $warnings" >> $GITHUB_STEP_SUMMARY
+
+          if [ $total_findings -gt 0 ]; then
+              echo "**Findings:**" >> $GITHUB_STEP_SUMMARY
+              echo "$sample_findings" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Set outputs for use in later steps or other jobs (if needed)
+          echo "total_findings=$total_findings" >> $GITHUB_OUTPUT
+          echo "errors=$errors" >> $GITHUB_OUTPUT
+          echo "warnings=$warnings" >> $GITHUB_OUTPUT
+
       - name: Upload Semgrep Results as Artifact
         uses: actions/upload-artifact@v4
         with:
