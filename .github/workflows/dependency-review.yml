@@ -41,22 +41,27 @@ jobs:
 
           # Optionally, include sample findings if any exist
           if [ $total_findings -gt 0 ]; then
-            echo "**Sample Findings:**" >> $GITHUB_STEP_SUMMARY
-            jq '.results[0:2] | .[] | "\(.path):\(.start.line):\(.extra.message)"' semgrep_output.json >> $GITHUB_STEP_SUMMARY
+            echo "**Findings:**" >> $GITHUB_STEP_SUMMARY
+            jq -r '.results[] | "* \(.path):\(.start.line): \(.extra.message)"' semgrep_output.json >> $GITHUB_STEP_SUMMARY
           fi
 
           # Set outputs for use in later steps or other jobs
           echo "total_findings=$total_findings" >> $GITHUB_OUTPUT
           echo "errors=$errors" >> $GITHUB_OUTPUT
           echo "warnings=$warnings" >> $GITHUB_OUTPUT
+      - name: Upload Semgrep Results as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: semgrep-results
+          path: semgrep_output.json
 
-      - name: Set Semgrep Scan Status
-        if: always() # Run even if previous steps fail
-        run: |
-          echo "SEMGREP_STATUS=$(if [ steps.semgrep_summary.outputs.total_findings -eq 0 ]; then echo 'Success'; else echo 'Failure'; fi)" >> $GITHUB_ENV
+      # - name: Set Semgrep Scan Status
+      #   if: always() # Run even if previous steps fail
+      #   run: |
+      #     echo "SEMGREP_STATUS=$(if [ steps.semgrep_summary.outputs.total_findings -eq 0 ]; then echo 'Success'; else echo 'Failure'; fi)" >> $GITHUB_ENV
 
-      - name: Update Actions Dashboard with Summary
-        if: always() 
-        run: |
-          echo "::set-output name=summary::$GITHUB_STEP_SUMMARY" 
-          echo "::set-output name=status::${SEMGREP_STATUS}"
+      # - name: Update Actions Dashboard with Summary
+      #   if: always() 
+      #   run: |
+      #     echo "::set-output name=summary::$GITHUB_STEP_SUMMARY" 
+      #     echo "::set-output name=status::${SEMGREP_STATUS}"
